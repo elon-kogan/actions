@@ -1,0 +1,36 @@
+# The one check this repository can run on itself: actionlint, with
+# shellcheck for the `run:` scripts, over every workflow here. A reusable
+# workflow cannot be executed without a caller, so this catches what a
+# caller would hit first — a bad context, a wrong input type, a shell error
+# in ghcr-cleanup.yml's keep step — before the merge instead of in the
+# caller's run. Dependabot's action bumps get a green check from it too.
+#
+# Not a reusable workflow: this is the only file here that runs on its own.
+name: Lint
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lint-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  actionlint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # The official image ships actionlint, shellcheck and pyflakes together,
+      # so the versions match each other and nothing is downloaded at run
+      # time. Pinned by digest like the other actions, but Dependabot does
+      # not follow docker:// steps: a bump is a manual edit, made together
+      # with the local install so a file passes here iff it passes locally.
+      - uses: docker://rhysd/actionlint@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667 # 1.7.12
+        with:
+          args: -color
