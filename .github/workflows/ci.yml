@@ -20,6 +20,10 @@ on:
 
 jobs:
   ci:
+    # The check reads "what / where / how": the caller's workflow says what
+    # is checked, its job says where (the app or a matrix component), this
+    # name says how — the command that ran.
+    name: ${{ inputs.command }}
     runs-on: ubuntu-latest
     defaults:
       run:

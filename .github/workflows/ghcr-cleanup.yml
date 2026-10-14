@@ -40,6 +40,10 @@ on:
 
 jobs:
   cleanup:
+    # Third level of the check's name (what / where / how): how, as in
+    # ci.yml. A dry run says so, so a log of "deleted" lines is not mistaken
+    # for a real one.
+    name: ghcr cleanup${{ inputs.dry-run && ' (dry run)' || '' }}
     runs-on: ubuntu-latest
     # The action is not safe to run in parallel against one package.
     concurrency:

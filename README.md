@@ -23,6 +23,13 @@ comment; Dependabot bumps both weekly.
 
 ## Calling
 
+A check's name has three levels, "what / where / how", and each side sets
+one: the caller's workflow name says what is checked (`CI`, `Image deps`),
+the caller's job id says where (`app`, or the component in a matrix), and
+the reusable workflow's job name says how — the command that ran
+(`bin/ci`, `docker build --target deps`). So the examples below name their
+job `app`, and a check reads `CI / app / bin/ci`.
+
 ### CI
 
 ```yaml
@@ -49,7 +56,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  ci:
+  app:
     uses: elon-kogan/actions/.github/workflows/ci.yml@v1
 ```
 
@@ -57,7 +64,7 @@ A monorepo runs the same workflow once per component:
 
 ```yaml
 jobs:
-  ci:
+  component:
     strategy:
       matrix:
         component: [contract, engine, plugin, templates]
@@ -95,7 +102,7 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  build:
+  app:
     uses: elon-kogan/actions/.github/workflows/build-image.yml@v1
 ```
 
@@ -125,7 +132,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  deps:
+  app:
     uses: elon-kogan/actions/.github/workflows/image-deps.yml@v1
 ```
 
@@ -150,7 +157,7 @@ permissions:
   packages: write
 
 jobs:
-  cleanup:
+  app:
     uses: elon-kogan/actions/.github/workflows/ghcr-cleanup.yml@v1
     with:
       dry-run: ${{ inputs.dry-run || false }}
