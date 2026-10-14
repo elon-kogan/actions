@@ -2,7 +2,8 @@
 
 Reusable GitHub Actions workflows shared by my app repositories. Each file
 under `.github/workflows/` is one `workflow_call` workflow; an app calls it
-with a single `uses:` line instead of carrying its own copy.
+with a single `uses:` line instead of carrying its own copy. The exception is
+`lint.yml`, which lints this repository itself.
 
 What stays in the app: the trigger and its paths filter, `permissions`,
 `concurrency` (`ghcr-cleanup.yml` is the one exception: it serialises itself
@@ -171,6 +172,7 @@ callers pick up fixes and action bumps without a change on their side. A
 change that breaks a caller — a renamed input, a changed default, a removed
 workflow — ships as `v2`, and each caller moves when it is ready.
 
-A reusable workflow cannot run on its own; `actionlint`, run locally before
-merging, is the only check here. A change is proven by a caller referencing
-it at `@main` before the tag moves.
+A reusable workflow cannot run on its own; `actionlint` (with shellcheck),
+run by `lint.yml` on every pull request and locally, is the only check here.
+A change is proven by a caller referencing it at `@main` before the tag
+moves.
