@@ -24,7 +24,8 @@ on:
       platforms:
         description: >
           Same platforms as the real build, so the base image resolved here
-          is the one that build will pull.
+          is the one that build will pull. The runner's own platform only,
+          as there: no QEMU is set up for another.
         type: string
         default: linux/amd64
 

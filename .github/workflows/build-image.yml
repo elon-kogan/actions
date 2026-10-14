@@ -31,7 +31,9 @@ on:
       platforms:
         description: >
           Platforms to build for. One is enough while nothing else pulls the
-          image; a second doubles the build.
+          image; a second doubles the build. The runner builds its own
+          platform only: another one needs QEMU, which this workflow does not
+          set up, so a RUN step for it fails with an exec format error.
         type: string
         default: linux/amd64
 
@@ -62,7 +64,8 @@ jobs:
       # packages, so the same tag would come to mean different bytes — a
       # deployed or rollback image silently replaced. If the tag is there,
       # there is nothing to recover; if the registry cannot be asked, do not
-      # guess.
+      # guess: only the registry's own "manifest unknown" answers count as
+      # absent, any other failure stops the build.
       - name: Refuse to overwrite an existing tag
         env:
           IMAGE: ${{ inputs.image }}:sha-${{ steps.sha.outputs.short }}
@@ -72,7 +75,7 @@ jobs:
             exit 1
           fi
           case "$out" in
-            *"no such manifest"*|*"manifest unknown"*|*MANIFEST_UNKNOWN*|*"not found"*)
+            *"no such manifest"*|*"manifest unknown"*|*MANIFEST_UNKNOWN*)
               echo "$IMAGE is new" ;;
             *)
               echo "::error::could not check whether $IMAGE exists: $out"
