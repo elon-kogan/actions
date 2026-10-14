@@ -6,10 +6,10 @@
 # opens a PR that writes the tag into the chart values, and merging it is
 # the deploy.
 #
-# The caller owns the trigger (push to main, paths-ignore for commits that
-# change nothing inside the image) and grants `packages: write`. The package
-# must give the calling repository write access (its "Manage Actions
-# access" setting) when it predates the workflow — it is not linked
+# The caller owns the trigger (push to its default branch, paths-ignore for
+# commits that change nothing inside the image) and grants `packages: write`.
+# The package must give the calling repository write access (its "Manage
+# Actions access" setting) when it predates the workflow — it is not linked
 # automatically.
 name: Build image
 
@@ -39,8 +39,10 @@ jobs:
   build:
     # A caller's workflow_dispatch can be pointed at any branch or tag, and
     # an image built from it would carry a sha-<7> tag the Updater accepts.
-    # Only commits on main become images.
-    if: github.ref == 'refs/heads/main'
+    # Only commits on the caller's default branch become images; the branch
+    # is read from the repository, so a caller named otherwise is not
+    # silently skipped.
+    if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

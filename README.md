@@ -13,7 +13,7 @@ reasons for them.
 | Workflow | Does |
 | --- | --- |
 | `ci.yml` | Checks out the app, installs the Ruby from its `.ruby-version` and the gems, runs one command (`bin/ci` by default). |
-| `build-image.yml` | Builds the image and pushes it to GHCR as `sha-<7>`; refuses to overwrite an existing tag; only from `main`. |
+| `build-image.yml` | Builds the image and pushes it to GHCR as `sha-<7>`; refuses to overwrite an existing tag; only from the default branch. |
 | `image-deps.yml` | Builds one Dockerfile stage (`deps` by default) without pushing, so a broken `bundle install` inside the image fails on the PR. |
 | `ghcr-cleanup.yml` | Deletes old `sha-*` images, keeping the 3 newest and every tag a chart values file still references. |
 
