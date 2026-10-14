@@ -31,6 +31,8 @@ on:
 
 jobs:
   deps:
+    # Third level of the check's name (what / where / how): how, as in ci.yml.
+    name: docker build --target ${{ inputs.target }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

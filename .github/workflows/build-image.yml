@@ -39,6 +39,10 @@ on:
 
 jobs:
   build:
+    # Third level of the check's name (what / where / how): how, as in
+    # ci.yml. The sha itself is not known at job level, so the tag is
+    # spelled out as a pattern.
+    name: push sha-<7>
     # A caller's workflow_dispatch can be pointed at any branch or tag, and
     # an image built from it would carry a sha-<7> tag the Updater accepts.
     # Only commits on the caller's default branch become images; the branch
