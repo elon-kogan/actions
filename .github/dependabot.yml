@@ -1,0 +1,10 @@
+# Dependabot version updates for the one place a version is pinned here: the
+# actions each reusable workflow calls. A bump arrives as a PR that moves the
+# SHA and the version comment together; merging it changes nothing for
+# callers until the v1 tag is moved onto it.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly

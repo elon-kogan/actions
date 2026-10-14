@@ -1,0 +1,39 @@
+# Reusable: check out the caller, install its Ruby and gems, run one command.
+# It is a check, not a gate: nothing here publishes anything. The trigger,
+# its paths filter and permissions live in the caller; a monorepo calls it
+# once per component through a matrix with `working-directory`.
+name: CI
+
+on:
+  workflow_call:
+    inputs:
+      working-directory:
+        description: >
+          Directory holding .ruby-version, Gemfile and the command; "." for a
+          single-app repository, components/<name> for a monorepo component.
+        type: string
+        default: "."
+      command:
+        description: The check to run, from working-directory.
+        type: string
+        default: bin/ci
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # Ruby version from the caller's .ruby-version, so a Ruby bump is one
+      # commit in the app and nothing here; the gems are installed and cached
+      # by the action, so a bin/setup inside the command finds them already
+      # there.
+      - uses: ruby/setup-ruby@651ff0d62c5c79bed6d53ec518387aae20e72c1a # v1.329.0
+        with:
+          working-directory: ${{ inputs.working-directory }}
+          bundler-cache: true
+
+      - run: ${{ inputs.command }}

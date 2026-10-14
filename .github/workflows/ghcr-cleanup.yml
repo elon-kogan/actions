@@ -1,0 +1,97 @@
+# Reusable: delete old sha-<7> images of the caller's GHCR package. Every
+# push to main leaves an image behind (build-image.yml) and nothing removes
+# it; this keeps the 3 newest sha-* tags plus every tag a chart still
+# references, and deletes the rest. Untagged children of a deleted image
+# (per-arch manifests, attestations) go with their parent — GitHub's own
+# delete-package-versions action can neither spare a tag by name nor see
+# those children, which is why this uses dataaxiom/ghcr-cleanup-action.
+#
+# Tags outside sha-* are never touched unless named in `delete-tags`. The
+# caller owns the schedule and grants `packages: write`.
+name: GHCR cleanup
+
+on:
+  workflow_call:
+    inputs:
+      package:
+        description: GHCR package name; by default the calling repository's.
+        type: string
+        default: ${{ github.event.repository.name }}
+      keep-tags-from:
+        description: >
+          Space-separated globs of chart values files; every `image.tag` found
+          in them is kept whatever its age, so a deployed or rollback image is
+          never deleted. Empty to keep by age only.
+        type: string
+        default: deploy/chart/values-*.yaml
+      delete-tags:
+        description: >
+          Comma-separated tags outside sha-* to delete as well (wildcards
+          allowed), for a one-off manual tag that is no longer deployed.
+        type: string
+        default: ""
+      dry-run:
+        description: Log what would be deleted and delete nothing.
+        type: boolean
+        default: false
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    # The action is not safe to run in parallel against one package.
+    concurrency:
+      group: ghcr-cleanup-${{ inputs.package }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # A glob that matches nothing or a file without image.tag fails the
+      # run instead of quietly shrinking the keep list: a typo here would
+      # otherwise let a deployed image be deleted.
+      - name: Tags still referenced by the chart
+        id: keep
+        env:
+          GLOBS: ${{ inputs.keep-tags-from }}
+        run: |
+          tags=()
+          read -ra globs <<< "$GLOBS"
+          for glob in "${globs[@]}"; do
+            mapfile -t files < <(compgen -G "$glob" || true)
+            if [ "${#files[@]}" -eq 0 ]; then
+              echo "::error::keep-tags-from: '$glob' matches no file"
+              exit 1
+            fi
+            for f in "${files[@]}"; do
+              tag=$(yq '.image.tag // ""' "$f")
+              if [ -z "$tag" ]; then
+                echo "::error::$f has no image.tag"
+                exit 1
+              fi
+              echo "$f -> $tag"
+              tags+=("$tag")
+            done
+          done
+          list=""
+          if [ "${#tags[@]}" -gt 0 ]; then
+            list=$(printf '%s\n' "${tags[@]}" | sort -u | paste -sd, -)
+          fi
+          echo "tags=$list" >> "$GITHUB_OUTPUT"
+
+      # keep-n-tagged counts only the tags delete-tags selects, so the 3
+      # newest sha-* survive and no other tag is in scope at all.
+      - uses: dataaxiom/ghcr-cleanup-action@d52806a0dc70b430571a37da1fde39733ffd640f # v1.2.2
+        with:
+          packages: ${{ inputs.package }}
+          delete-tags: sha-*
+          keep-n-tagged: 3
+          exclude-tags: ${{ steps.keep.outputs.tags }}
+          dry-run: ${{ inputs.dry-run }}
+
+      # Explicitly named tags go in a second pass without keep-n-tagged, so
+      # a named tag newer than the sha-* ones is not kept in their place.
+      - if: inputs.delete-tags != ''
+        uses: dataaxiom/ghcr-cleanup-action@d52806a0dc70b430571a37da1fde39733ffd640f # v1.2.2
+        with:
+          packages: ${{ inputs.package }}
+          delete-tags: ${{ inputs.delete-tags }}
+          exclude-tags: ${{ steps.keep.outputs.tags }}
+          dry-run: ${{ inputs.dry-run }}
