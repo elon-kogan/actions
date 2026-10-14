@@ -3,11 +3,14 @@
 # it; this keeps the 3 newest sha-* tags plus every tag a chart still
 # references, and deletes the rest. Untagged children of a deleted image
 # (per-arch manifests, attestations) go with their parent — GitHub's own
-# delete-package-versions action can neither spare a tag by name nor see
-# those children, which is why this uses dataaxiom/ghcr-cleanup-action.
+# delete-package-versions action cannot link those children to their tag
+# and would leave them behind, which is why this uses
+# dataaxiom/ghcr-cleanup-action.
 #
 # Tags outside sha-* are never touched unless named in `delete-tags`. The
-# caller owns the schedule and grants `packages: write`.
+# caller owns the schedule and grants `packages: write`; the package itself
+# must grant the calling repository the Admin role (its "Manage Actions
+# access" setting) — write is enough to push, not to delete.
 name: GHCR cleanup
 
 on:

@@ -17,7 +17,9 @@ on:
   workflow_call:
     inputs:
       image:
-        description: Image name without a tag.
+        description: >
+          Image name without a tag. Must be lowercase: an owner or repository
+          with capitals is not a valid image reference, so pass it explicitly.
         type: string
         default: ghcr.io/${{ github.repository }}
       target:

@@ -5,8 +5,10 @@ under `.github/workflows/` is one `workflow_call` workflow; an app calls it
 with a single `uses:` line instead of carrying its own copy.
 
 What stays in the app: the trigger and its paths filter, `permissions`,
-`concurrency`, and every secret. What lives here: the steps, the pinned
-action versions, and the reasons for them.
+`concurrency` (`ghcr-cleanup.yml` is the one exception: it serialises itself
+per package, because the cleanup action is not safe in parallel), and every
+secret. What lives here: the steps, the pinned action versions, and the
+reasons for them.
 
 | Workflow | Does |
 | --- | --- |
@@ -157,7 +159,9 @@ Inputs: `package` (default: the repository name), `keep-tags-from` (globs of
 chart values files whose `image.tag` is kept; default
 `deploy/chart/values-*.yaml`), `delete-tags` (tags outside `sha-*` to delete
 as well; default none), `dry-run` (default `false`). Run it once with
-`dry-run: true` before letting the schedule delete anything.
+`dry-run: true` before letting the schedule delete anything. The GHCR package
+must grant the calling repository the Admin role under "Manage Actions
+access": write is enough to push an image, not to delete one.
 
 ## Versions
 
@@ -167,6 +171,6 @@ callers pick up fixes and action bumps without a change on their side. A
 change that breaks a caller — a renamed input, a changed default, a removed
 workflow — ships as `v2`, and each caller moves when it is ready.
 
-A reusable workflow cannot run on its own; `actionlint` is the only check
-here. A change is proven by a caller referencing it at `@main` before the tag
-moves.
+A reusable workflow cannot run on its own; `actionlint`, run locally before
+merging, is the only check here. A change is proven by a caller referencing
+it at `@main` before the tag moves.
