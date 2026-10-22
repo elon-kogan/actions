@@ -1,16 +1,18 @@
-# Reusable: delete old sha-<7> images of the caller's GHCR package. Every
-# push to main leaves an image behind (build-image.yml) and nothing removes
-# it; this keeps the 3 newest sha-* tags plus every tag a chart still
-# references, and deletes the rest. Untagged children of a deleted image
-# (per-arch manifests, attestations) go with their parent — GitHub's own
-# delete-package-versions action cannot link those children to their tag
-# and would leave them behind, which is why this uses
-# dataaxiom/ghcr-cleanup-action.
+# Reusable: delete old build images of the caller's GHCR package — tags of
+# the shape <yyyy-mm-dd>-<run>-<sha7> (build-image.yml) and, until they have
+# aged out, the sha-<7> ones it pushed before. Every push to main leaves an
+# image behind and nothing removes it; this keeps the 3 newest of those tags
+# plus every tag a chart still references, and deletes the rest. Untagged
+# children of a deleted image (per-arch manifests, attestations) go with
+# their parent — GitHub's own delete-package-versions action cannot link
+# those children to their tag and would leave them behind, which is why
+# this uses dataaxiom/ghcr-cleanup-action.
 #
-# Tags outside sha-* are never touched unless named in `delete-tags`. The
-# caller owns the schedule and grants `packages: write`; the package itself
-# must grant the calling repository the Admin role (its "Manage Actions
-# access" setting) — write is enough to push, not to delete.
+# Any other tag — a hand-pushed <date>-manual-<sha7>, say — is never touched
+# unless named in `delete-tags`. The caller owns the schedule and grants
+# `packages: write`; the package itself must grant the calling repository
+# the Admin role (its "Manage Actions access" setting) — write is enough to
+# push, not to delete.
 name: GHCR cleanup
 
 on:
@@ -29,8 +31,10 @@ on:
         default: deploy/chart/values-*.yaml
       delete-tags:
         description: >
-          Comma-separated tags outside sha-* to delete as well (wildcards
-          allowed), for a one-off manual tag that is no longer deployed.
+          Comma-separated tags outside the build shapes
+          (<yyyy-mm-dd>-<run>-<sha7>, sha-<7>) to delete as well; wildcards
+          `?` and `*` allowed. For a one-off manual tag that is no longer
+          deployed.
         type: string
         default: ""
       dry-run:
@@ -78,23 +82,40 @@ jobs:
             done
           done
           list=""
+          regex=""
           if [ "${#tags[@]}" -gt 0 ]; then
             list=$(printf '%s\n' "${tags[@]}" | sort -u | paste -sd, -)
+            # The same tags as one anchored regex for the pass below that
+            # runs with use-regex (which reads exclude-tags as a regex too);
+            # any metacharacter a tag could carry, a dot say, is escaped.
+            regex="^($(printf '%s\n' "${tags[@]}" | sort -u | sed 's/[][\.*^$+?(){}|\\]/\\&/g' | paste -sd '|' -))$"
           fi
           echo "tags=$list" >> "$GITHUB_OUTPUT"
+          echo "regex=$regex" >> "$GITHUB_OUTPUT"
 
-      # keep-n-tagged counts only the tags delete-tags selects, so the 3
-      # newest sha-* survive and no other tag is in scope at all.
+      # One regex selects both build shapes, and keep-n-tagged counts only
+      # what delete-tags selects, so the 3 newest build tags survive and no
+      # other tag is in scope at all. A regex rather than the action's
+      # wildcards because those know only `?`, `*` and `**` — no character
+      # classes, `[0-9]` is literal text — and every wildcard that fits
+      # <date>-<run>-<sha7> also fits a hand tag such as
+      # 2026-09-12-manual-a07bd01, which must stay out of scope. use-regex
+      # also makes exclude-tags a regex (hence the keep step's second
+      # output); the package name is matched as a regex only with
+      # expand-packages, which a plain name never turns on.
       - uses: dataaxiom/ghcr-cleanup-action@d52806a0dc70b430571a37da1fde39733ffd640f # v1.2.2
         with:
           packages: ${{ inputs.package }}
-          delete-tags: sha-*
+          use-regex: true
+          delete-tags: '^(sha-[0-9a-f]{7}|[0-9]{4}-[0-9]{2}-[0-9]{2}-[0-9]+-[0-9a-f]{7})$'
           keep-n-tagged: 3
-          exclude-tags: ${{ steps.keep.outputs.tags }}
+          exclude-tags: ${{ steps.keep.outputs.regex }}
           dry-run: ${{ inputs.dry-run }}
 
       # Explicitly named tags go in a second pass without keep-n-tagged, so
-      # a named tag newer than the sha-* ones is not kept in their place.
+      # a named tag newer than the build ones is not kept in their place.
+      # This pass keeps the action's wildcards, so the input stays as
+      # documented.
       - if: inputs.delete-tags != ''
         uses: dataaxiom/ghcr-cleanup-action@d52806a0dc70b430571a37da1fde39733ffd640f # v1.2.2
         with:

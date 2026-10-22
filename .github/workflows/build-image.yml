@@ -1,7 +1,10 @@
-# Reusable: build the caller's image and push it to GHCR as <image>:sha-<7>,
-# where <7> is the first seven hex characters of the caller's commit. That
-# single tag is the whole contract with the cluster: ArgoCD Image Updater
-# accepts tags matching ^sha-[0-9a-f]{7}$ and nothing else, so there is no
+# Reusable: build the caller's image and push it to GHCR as
+# <image>:<yyyy-mm-dd>-<run>-<sha7>, e.g. 2026-10-22-42-98d8fd8: the UTC
+# build date, the caller's run number as is (no padding) and the first seven
+# hex characters of the caller's commit — readable in GHCR and in the
+# Updater's PRs, and one shape for every app. That single tag is the whole
+# contract with the cluster: ArgoCD Image Updater accepts tags matching
+# ^\d{4}-\d{2}-\d{2}-\d+-[0-9a-f]{7}$ and nothing else, so there is no
 # `latest` and no branch tag. The deploy itself is not here — the Updater
 # opens a PR that writes the tag into the chart values, and merging it is
 # the deploy.
@@ -40,11 +43,11 @@ on:
 jobs:
   build:
     # Third level of the check's name (what / where / how): how, as in
-    # ci.yml. The sha itself is not known at job level, so the tag is
-    # spelled out as a pattern.
-    name: push sha-<7>
+    # ci.yml. The tag itself is not known at job level, so it is spelled
+    # out as a pattern.
+    name: push <date>-<run>-<sha7>
     # A caller's workflow_dispatch can be pointed at any branch or tag, and
-    # an image built from it would carry a sha-<7> tag the Updater accepts.
+    # an image built from it would carry a tag the Updater accepts.
     # Only commits on the caller's default branch become images; the branch
     # is read from the repository, so a caller named otherwise is not
     # silently skipped.
@@ -53,9 +56,17 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Short sha
-        id: sha
-        run: echo "short=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+      # The one place the tag is computed; the guard and the push below
+      # both read it from here. github.run_number inside a
+      # workflow_call is the caller's: a called workflow runs inside the
+      # caller's run and sees its github context. It is the run's number,
+      # not the attempt's, so a re-run keeps it. The date is UTC so no two
+      # runners disagree on it.
+      - name: Image tag
+        id: tag
+        env:
+          RUN_NUMBER: ${{ github.run_number }}
+        run: echo "tag=$(date -u +%F)-${RUN_NUMBER}-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
 
       - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
@@ -63,19 +74,23 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # GHCR does not make tags immutable; this step does. A rebuild of the
-      # same commit would start from a moved base image and today's apt
-      # packages, so the same tag would come to mean different bytes — a
-      # deployed or rollback image silently replaced. If the tag is there,
-      # there is nothing to recover; if the registry cannot be asked, do not
-      # guess: only the registry's own "manifest unknown" answers count as
-      # absent, any other failure stops the build.
+      # GHCR does not make tags immutable; the tag's shape nearly does. A
+      # fresh run carries a run number no earlier run had, so it can never
+      # reuse a tag. A re-run can: it keeps its run number, and on the same
+      # UTC day it computes the same tag — a rebuild from a moved base image
+      # and today's apt packages, so the tag would come to mean different
+      # bytes, a deployed or rollback image silently replaced. This step
+      # refuses that. If the tag is there, there is nothing to recover; if
+      # the registry cannot be asked, do not guess: only the registry's own
+      # "manifest unknown" answers count as absent, any other failure stops
+      # the build. (A re-run on a later day gets a new date, so a new tag: a
+      # second image of the commit, and nothing replaced.)
       - name: Refuse to overwrite an existing tag
         env:
-          IMAGE: ${{ inputs.image }}:sha-${{ steps.sha.outputs.short }}
+          IMAGE: ${{ inputs.image }}:${{ steps.tag.outputs.tag }}
         run: |
           if out=$(docker manifest inspect "$IMAGE" 2>&1); then
-            echo "::error::$IMAGE already exists and tags are immutable; this commit is not rebuilt."
+            echo "::error::$IMAGE already exists and tags are immutable; it is not rebuilt."
             exit 1
           fi
           case "$out" in
@@ -94,9 +109,10 @@ jobs:
           target: ${{ inputs.target }}
           platforms: ${{ inputs.platforms }}
           push: true
-          tags: ${{ inputs.image }}:sha-${{ steps.sha.outputs.short }}
+          tags: ${{ inputs.image }}:${{ steps.tag.outputs.tag }}
           # Lets GitHub link the package to the calling repository and show
-          # the commit the image came from.
+          # the commit the image came from; the Updater's PR body links the
+          # source commit through these.
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}

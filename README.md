@@ -14,9 +14,9 @@ reasons for them.
 | Workflow | Does |
 | --- | --- |
 | `ci.yml` | Checks out the app, installs the Ruby from its `.ruby-version` and the gems, runs one command (`bin/ci` by default). |
-| `build-image.yml` | Builds the image and pushes it to GHCR as `sha-<7>`; refuses to overwrite an existing tag; only from the default branch. |
+| `build-image.yml` | Builds the image and pushes it to GHCR as `<yyyy-mm-dd>-<run>-<sha7>`; refuses to overwrite an existing tag; only from the default branch. |
 | `image-deps.yml` | Builds one Dockerfile stage (`deps` by default) without pushing, so a broken `bundle install` inside the image fails on the PR. |
-| `ghcr-cleanup.yml` | Deletes old `sha-*` images, keeping the 3 newest and every tag a chart values file still references. |
+| `ghcr-cleanup.yml` | Deletes old build images (`<yyyy-mm-dd>-<run>-<sha7>`, and the earlier `sha-<7>`), keeping the 3 newest and every tag a chart values file still references. |
 
 Every third-party action is pinned to a full commit SHA with its version in a
 comment; Dependabot bumps both weekly.
@@ -110,6 +110,11 @@ Inputs: `image` (default `ghcr.io/<owner>/<repo>`), `target` (default
 `prod`), `platforms` (default `linux/amd64`). The GHCR package must grant the
 calling repository write access if it predates the workflow.
 
+The tag is `<yyyy-mm-dd>-<run>-<sha7>`, e.g. `2026-10-22-42-98d8fd8`: the UTC
+build date, the caller's `github.run_number` as is, and the first seven hex
+characters of the commit. It is the only tag pushed, and the one shape ArgoCD
+Image Updater accepts (`^\d{4}-\d{2}-\d{2}-\d+-[0-9a-f]{7}$`).
+
 ### Image deps
 
 ```yaml
@@ -165,8 +170,9 @@ jobs:
 
 Inputs: `package` (default: the repository name), `keep-tags-from` (globs of
 chart values files whose `image.tag` is kept; default
-`deploy/chart/values-*.yaml`), `delete-tags` (tags outside `sha-*` to delete
-as well; default none), `dry-run` (default `false`). Run it once with
+`deploy/chart/values-*.yaml`), `delete-tags` (tags outside the build shapes
+to delete as well, `?` and `*` wildcards allowed; default none), `dry-run`
+(default `false`). Run it once with
 `dry-run: true` before letting the schedule delete anything. The GHCR package
 must grant the calling repository the Admin role under "Manage Actions
 access": write is enough to push an image, not to delete one.
