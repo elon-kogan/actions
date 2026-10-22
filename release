@@ -1,0 +1,130 @@
+#!/usr/bin/env bash
+# Cuts a release of the reusable workflows: the exact tag vX.Y.Z on the merged
+# main, the moving major tag vX re-pointed at it, and a GitHub release with
+# generated notes. The only way a tag is made here: a tag written by hand can
+# land on a local commit, skip the fetch, or move vX onto something no caller
+# has proven, and the next person cannot tell which. The checks below refuse
+# all of that before anything is written.
+#
+# Which number to pick (patch, minor, major) is the README's Versions
+# section; /release in Claude Code reads the log and proposes one.
+#
+# Runs again after a partial failure: an exact tag that already sits on HEAD
+# is kept, not re-created, and the steps after it (re-point vX, push, GitHub
+# release) are repeated; each is a no-op once done. An exact tag on another
+# commit is a refusal, because a published version never moves.
+# Usage: ./release v1.2.0
+set -euo pipefail
+
+cd "$(dirname "$0")"
+
+version="${1:-}"
+if [[ ! "$version" =~ ^v([0-9]+)\.[0-9]+\.[0-9]+$ ]]; then
+  echo "release: '${version}' is not a version of the shape vX.Y.Z" >&2
+  echo "usage: ./release <vX.Y.Z>" >&2
+  exit 2
+fi
+major="v${BASH_REMATCH[1]}"
+
+refuse() {
+  echo "release: $1" >&2
+  echo "  fix: $2" >&2
+  exit 1
+}
+
+# Tracked changes only: an untracked file (a scratch note, a local settings
+# file) is not part of the commit the tag points at.
+if [[ -n "$(git status --porcelain --untracked-files=no)" ]]; then
+  refuse "the working tree has uncommitted changes" \
+    "commit them through a pull request, or 'git stash' them, then run again"
+fi
+
+branch="$(git symbolic-ref --quiet --short HEAD || true)"
+if [[ "$branch" != "main" ]]; then
+  refuse "on '${branch:-a detached HEAD}', releases are cut from main only" \
+    "git switch main"
+fi
+
+# --force so that a major tag moved by a release cut elsewhere replaces the
+# local copy; git refuses to clobber a tag without it.
+git fetch --quiet --force --tags origin
+head="$(git rev-parse HEAD)"
+if [[ "$head" != "$(git rev-parse origin/main)" ]]; then
+  refuse "HEAD ($(git rev-parse --short HEAD)) is not origin/main ($(git rev-parse --short origin/main))" \
+    "git pull --ff-only origin main; a local commit goes through a pull request first"
+fi
+
+if ! gh auth status >/dev/null 2>&1; then
+  refuse "gh is not logged in, the GitHub release could not be created" \
+    "gh auth login"
+fi
+
+# Exact tags only: v1 and anything not vX.Y.Z do not take part in the order.
+# sort -V puts v1.10.0 after v1.9.0, where a plain sort would not.
+exact_tags="$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' || true)"
+highest="$(printf '%s\n' "$exact_tags" | sort -V | sed -n '$p')"
+
+if git rev-parse --verify --quiet "refs/tags/${version}" >/dev/null; then
+  tagged="$(git rev-parse "${version}^{commit}")"
+  if [[ "$tagged" != "$head" ]]; then
+    refuse "${version} already exists on $(git rev-parse --short "$tagged"), a published version never moves" \
+      "release the next number instead, e.g. the one /release proposes"
+  fi
+  echo "${version} already on HEAD, left as it is: finishing the steps after it."
+  resumed=1
+else
+  if [[ -n "$highest" && "$(printf '%s\n%s\n' "$highest" "$version" | sort -V | sed -n '$p')" != "$version" ]]; then
+    refuse "${version} is not above the highest release, ${highest}" \
+      "pick a number above ${highest}; see the README's Versions section for which part to raise"
+  fi
+  git tag --annotate --message "$version" "$version" "$head"
+  resumed=0
+fi
+
+# Release notes run from the previous exact tag; GitHub would pick one by
+# itself, but naming it keeps the notes the same on a rerun.
+previous="$(printf '%s\n' "$exact_tags" | grep -vx "$version" | sort -V | sed -n '$p' || true)"
+# Where the moving major tag pointed before this release, for the summary.
+major_before=""
+if git rev-parse --verify --quiet "refs/tags/${major}" >/dev/null; then
+  major_before="$(git rev-parse --short "${major}^{commit}")"
+fi
+
+# The moving tag is annotated too, so `git describe` and GitHub show the
+# same kind of object for both. -f because it exists on every release but
+# the first of a major.
+git tag --force --annotate --message "${major} -> ${version}" "$major" "$head" >/dev/null
+
+# Two pushes: the exact tag goes without force, so a tag that was moved by
+# hand on the remote is refused rather than overwritten. The force is for the
+# major tag and names its one ref; a bare `push --force` is never run here.
+git push --quiet origin "refs/tags/${version}"
+git push --quiet --force origin "refs/tags/${major}:refs/tags/${major}"
+
+if gh release view "$version" >/dev/null 2>&1; then
+  echo "GitHub release ${version} already exists, left as it is."
+  release_url="$(gh release view "$version" --json url --jq .url)"
+else
+  notes_from=()
+  if [[ -n "$previous" ]]; then
+    notes_from=(--notes-start-tag "$previous")
+  fi
+  release_url="$(gh release create "$version" --verify-tag --generate-notes ${notes_from[@]+"${notes_from[@]}"})"
+fi
+
+short="$(git rev-parse --short "$head")"
+echo
+if ((resumed)); then
+  echo "${version} on ${short} (kept from the earlier run)"
+else
+  echo "${version} on ${short} (new, annotated)"
+fi
+if [[ -z "$major_before" ]]; then
+  echo "${major} on ${short} (new major: callers move to @${major} when they are ready)"
+elif [[ "$major_before" == "$short" ]]; then
+  echo "${major} on ${short} (already there)"
+else
+  echo "${major}: ${major_before} -> ${short}"
+fi
+echo "release: ${release_url}"
+echo "Callers on @${major} pick up ${version} from their next run."

@@ -179,13 +179,34 @@ access": write is enough to push an image, not to delete one.
 
 ## Versions
 
-Callers reference `@v1`. The tag is created after the first merge and moved
-onto every later release that keeps the inputs and behaviour compatible, so
-callers pick up fixes and action bumps without a change on their side. A
-change that breaks a caller — a renamed input, a changed default, a removed
-workflow — ships as `v2`, and each caller moves when it is ready.
+Two kinds of tag. `vX.Y.Z` is exact and never moves: a release is the
+commit it was cut on. `vX` is what callers reference (`@v1`) and is
+re-pointed at every compatible release, so callers pick up fixes and action
+bumps without a change on their side. There are no moving minor tags.
+
+Which part to raise:
+
+- patch: fixes and pinned-action bumps, nothing a caller sees changes.
+- minor: new behaviour behind the same inputs. The image tag moving from
+  `sha-<7>` to `<yyyy-mm-dd>-<run>-<sha7>` is the model case: nothing a
+  caller writes changed, what it gets did.
+- major: a caller has to change something — a renamed input, a changed
+  default, a removed workflow. It ships as `vX+1`; the old `vX` stays where
+  it was, and each caller moves its `uses:` line when it is ready. Versions
+  only go up, so an old major gets no patch once the next one is out.
+
+`./release vX.Y.Z` is the only way a tag is made here. It refuses a dirty
+tree, a branch other than main, a HEAD that is not origin/main, an existing
+tag and a number that is not above the highest release; then it creates the
+annotated exact tag, re-points the major, pushes both (the major with a force
+limited to that one ref) and creates the GitHub release with generated notes.
+Run again after a partial failure, it keeps an exact tag already on HEAD and
+finishes the steps after it. `/release` in Claude Code reads the log since
+the last release, proposes the level with the reason per commit, and runs the
+line only on a yes.
 
 A reusable workflow cannot run on its own; `actionlint` (with shellcheck),
 run by `lint.yml` on every pull request and locally, is the only check here.
 A change is proven by a caller referencing it at `@main` before the tag
-moves.
+moves: the script checks that main is merged and pushed, not that a caller
+ran it.
