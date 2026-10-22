@@ -191,9 +191,10 @@ Which part to raise:
   `sha-<7>` to `<yyyy-mm-dd>-<run>-<sha7>` is the model case: nothing a
   caller writes changed, what it gets did.
 - major: a caller has to change something — a renamed input, a changed
-  default, a removed workflow. It ships as `vX+1`; the old `vX` stays where
-  it was, and each caller moves its `uses:` line when it is ready. Versions
-  only go up, so an old major gets no patch once the next one is out.
+  default, a removed workflow. One such commit makes the whole release
+  major. It ships as `vX+1`; the old `vX` stays where it was, and each
+  caller moves its `uses:` line when it is ready. Versions only go up, so
+  an old major gets no patch once the next one is out.
 
 `./release vX.Y.Z` is the only way a tag is made here. It refuses a dirty
 tree, a branch other than main, a HEAD that is not origin/main, an existing
