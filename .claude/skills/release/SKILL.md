@@ -10,10 +10,8 @@ disable-model-invocation: true
 
 # release
 
-## Rules
-
-1. Never create or move a tag yourself. `./release` is the only way a tag
-   is made here.
+`./release` is the only way a tag is made here: never create or move a tag
+yourself.
 
 ## Steps
 
@@ -26,12 +24,17 @@ disable-model-invocation: true
    git log --oneline "${last}..origin/main"
    ```
 
-   Read the README's Versions section for the rule. If the log is empty,
-   say there is nothing to release and stop.
+   An empty `last` means no release yet: ask which version to start from
+   instead of reading the log. An empty log means nothing to release: say
+   so and stop.
 
-2. Propose patch, minor or major. For each commit that drives the choice,
-   one line: the commit, and why it is a fix, new compatible behaviour, or
-   a break. Say which single commit sets the level.
+2. Propose patch, minor or major by the "Which part to raise" list in the
+   README's Versions section. One line per commit that drives the choice,
+   and say which single commit sets the level:
+
+   ```
+   f1a95f4 Image tag: <yyyy-mm-dd>-<run>-<sha7> replaces sha-<7>: new behaviour, same inputs -> minor (sets the level)
+   ```
 
 3. Show the exact line and stop:
 
@@ -47,4 +50,5 @@ disable-model-invocation: true
    is. If it refuses, show the refusal and its fix line, and stop; do not
    work around it.
 
-5. On a major, point at the README's major bullet.
+5. On a major, quote the README's major bullet: the old `vX` stays where it
+   was, and each caller moves its `uses:` line itself.
