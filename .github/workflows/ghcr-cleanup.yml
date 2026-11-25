@@ -103,7 +103,7 @@ jobs:
       # also makes exclude-tags a regex (hence the keep step's second
       # output); the package name is matched as a regex only with
       # expand-packages, which a plain name never turns on.
-      - uses: dataaxiom/ghcr-cleanup-action@d52806a0dc70b430571a37da1fde39733ffd640f # v1.2.2
+      - uses: dataaxiom/ghcr-cleanup-action@ac45a8c04b1eb4b27974ca79a0a74f344c93664b # v1.3.0
         with:
           packages: ${{ inputs.package }}
           use-regex: true
@@ -117,7 +117,7 @@ jobs:
       # This pass keeps the action's wildcards, so the input stays as
       # documented.
       - if: inputs.delete-tags != ''
-        uses: dataaxiom/ghcr-cleanup-action@d52806a0dc70b430571a37da1fde39733ffd640f # v1.2.2
+        uses: dataaxiom/ghcr-cleanup-action@ac45a8c04b1eb4b27974ca79a0a74f344c93664b # v1.3.0
         with:
           packages: ${{ inputs.package }}
           delete-tags: ${{ inputs.delete-tags }}
